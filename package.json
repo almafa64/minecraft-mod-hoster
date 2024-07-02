@@ -15,5 +15,9 @@
   "bugs": {
     "url": "https://github.com/almafa64/minecraft-mods-page/issues"
   },
-  "homepage": "https://github.com/almafa64/minecraft-mods-page#readme"
+  "homepage": "https://github.com/almafa64/minecraft-mods-page#readme",
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "restify": "^11.1.0"
+  }
 }
