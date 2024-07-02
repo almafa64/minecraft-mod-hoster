@@ -1,5 +1,13 @@
 "use strict"
 
+// ---- user settings ----
+
+const PRIVATE_KEY_PATH = "<YOUR PRIVATE SSL KEY PATH HERE>";
+const CERTIFICATE_PATH = "<YOUR PUBLIC SSL KEY PATH HERE>";
+const PORT = 443;
+
+// ---- server code ----
+
 const restify = require('restify');
 const errs = require('restify-errors');
 const fs = require("fs");
@@ -7,14 +15,18 @@ const fsPromise = require("fs/promises");
 const path = require("path");
 const archiver = require('archiver');
 
-const pkey_path = "<YOUR PRIVATE SSL KEY PATH HERE>";
-const key_path = "<YOUR PUBLIC SSL KEY PATH HERE>";
+/**	@type {restify.ServerOptions} */
+const server_opts = { strictNext: true }
 
-const server = restify.createServer({
-	strictNext: true,
-	key: fs.readFileSync(pkey_path),
-	certificate: fs.readFileSync(key_path),
-});
+if(fs.existsSync(PRIVATE_KEY_PATH) && fs.existsSync(CERTIFICATE_PATH))
+{
+	Object.assign(server_opts, {
+		key: fs.readFileSync(PRIVATE_KEY_PATH),
+		certificate: fs.readFileSync(CERTIFICATE_PATH)
+	});
+}
+
+const server = restify.createServer(server_opts);
 const mods_path = path.resolve(".", "mods");
 const main_url_path = "/minecraft/mods";
 
@@ -27,8 +39,8 @@ const zipping = new Set();
 
 /**
  * https://stackoverflow.com/a/35951373
- * @param {Map} map1 
- * @param {Map} map2 
+ * @param {Map} map1
+ * @param {Map} map2
  * @returns {boolean} true if same
  */
 function compare_maps(map1, map2) {
@@ -41,12 +53,12 @@ function compare_maps(map1, map2) {
 		if (testVal !== val || (testVal === undefined && !map2.has(key)))
 			return false;
 	}
-	
+
 	return true;
 }
 
 /**
- * @param {string[]} dirs 
+ * @param {string[]} dirs
  * @returns {string}
  */
 function generate_main_page(dirs)
@@ -87,7 +99,8 @@ async function collect_mods(dir)
 server.use(restify.plugins.multipartBodyParser())
 
 server.get(main_url_path, (req, res, next) => {
-	fs.readdir(mods_path, (err, mod_dirs) => {
+	fs.readdir(mods_path, {withFileTypes: true}, (err, mod_dirs) => {
+		mod_dirs = mod_dirs.filter(e => e.isDirectory()).map(v => v.name);
 		const body = generate_main_page(mod_dirs);
 		res.writeHead(200, {
 			"Content-Length": Buffer.byteLength(body),
@@ -109,26 +122,24 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 
 	const zip_path = path.join(path_name, "mods.zip");
 
-	// ToDo dont zip for new client if already zipping -> wait for it then send it
-
 	collect_mods(path_name).catch(err => next(err)).then(modfiles => {
 		function send_old_zip()
 		{
 			if(!fs.existsSync(zip_path)) return false;
-	
+
 			const last_modfiles = all_modfiles.get(name);
 			if(last_modfiles === undefined || !compare_maps(last_modfiles, modfiles)) return false;
-			
+
 			res.writeHead(200, {
 				"Content-Type": "application/octet-stream",
-				"Content-Disposition": `attachment;filename=${name}.zip` 
+				"Content-Disposition": `attachment;filename=${name}.zip`
 			});
-	
+
 			fs.createReadStream(zip_path).on("close", () => next()).on('error', err => {
 				console.error("oh no: " + err);
 				next(new errs.InternalServerError("Failed to read zip! Please try again!"));
 			}).pipe(res);
-	
+
 			return true;
 		}
 
@@ -138,7 +149,7 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 				setTimeout(run, 50);
 				return false;
 			}
-			
+
 			return send_old_zip();
 		}
 
@@ -149,7 +160,7 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 
 		res.writeHead(200, {
 			"Content-Type": "application/octet-stream",
-			"Content-Disposition": `attachment;filename=${name}.zip` 
+			"Content-Disposition": `attachment;filename=${name}.zip`
 		});
 
 		zipping.add(name);
@@ -171,4 +182,4 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 	});
 });
 
-server.listen(443, () => console.log(`${server.name} listening at ${server.url}`));
+server.listen(PORT, () => console.log(`${server.name} listening at ${server.url}`));
