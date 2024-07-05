@@ -14,6 +14,7 @@ const fs = require("fs");
 const fsPromise = require("fs/promises");
 const path = require("path");
 const archiver = require('archiver');
+const { strictEqual } = require('assert');
 
 /**	@type {restify.ServerOptions} */
 const server_opts = { strictNext: true }
@@ -28,6 +29,7 @@ if(fs.existsSync(PRIVATE_KEY_PATH) && fs.existsSync(CERTIFICATE_PATH))
 
 const server = restify.createServer(server_opts);
 const mods_path = path.resolve(".", "mods");
+const static_dir_path = path.resolve(".", "static");
 const main_url_path = "/minecraft/mods";
 
 /** @typedef {Map<string, number>} ModFiles */
@@ -63,11 +65,12 @@ function compare_maps(map1, map2) {
  */
 function generate_main_page(dirs)
 {
-	if(dirs.length == 0) return "No mods here!";
+	var body = '<link rel="shortcut icon" href="/minecraft/favicon.ico">';
+	if(dirs.length == 0) return body + "No mods here!";
 
 	function make_href(name) { return `${main_url_path}/${name}`};
 
-	var body = `<ul><li><a href='${make_href(dirs[0])}'>${dirs[0]}`;
+	body += `<ul><li><a href='${make_href(dirs[0])}'>${dirs[0]}`;
 	for(var i = 1; i < dirs.length; i++)
 	{
 		body += `</a></li><li><a href='${make_href(dirs[i])}'>${dirs[i]}`;
@@ -97,6 +100,8 @@ async function collect_mods(dir)
 }
 
 server.use(restify.plugins.multipartBodyParser())
+
+server.get('/minecraft/*', restify.plugins.serveStatic({ directory: static_dir_path, appendRequestPath: false }));
 
 server.get(main_url_path, (req, res, next) => {
 	fs.readdir(mods_path, {withFileTypes: true}, (err, mod_dirs) => {
