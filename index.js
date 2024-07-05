@@ -131,11 +131,11 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 			if(last_modfiles === undefined || !compare_maps(last_modfiles, modfiles)) return false;
 
 			res.writeHead(200, {
-				"Content-Type": "application/octet-stream",
-				"Content-Disposition": `attachment;filename=${name}.zip`
+				"Content-Type": "application/zip",
+				"Content-Disposition": `attachment;filename=${name}.zip`,
 			});
 
-			fs.createReadStream(zip_path).on("close", () => next()).on('error', err => {
+			fs.createReadStream(zip_path, {highWaterMark: 1024 * 1024}).on("close", () => next()).on('error', err => {
 				console.error("oh no: " + err);
 				next(new errs.InternalServerError("Failed to read zip! Please try again!"));
 			}).pipe(res);
@@ -147,7 +147,7 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 			if(zipping.has(name))
 			{
 				setTimeout(run, 50);
-				return false;
+				return true;
 			}
 
 			return send_old_zip();
