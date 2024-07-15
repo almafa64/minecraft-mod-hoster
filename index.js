@@ -82,19 +82,26 @@ function generate_main_page(dirs)
  * @param {string} dir
  * @returns {ModFiles}
  */
-async function collect_mods(dir)
+async function collect_mods(both_dir, client_dir)
 {
-	const files = await fsPromise.readdir(dir);
-
 	/** @type {ModFiles} */
 	const modfiles = new Map();
 
-	for(var file of files)
+	const both_files = await fsPromise.readdir(both_dir);
+	const client_files = await fsPromise.readdir(client_dir);
+
+	async function populate_modfiles(files, dir)
 	{
-		if(!file.endsWith(".jar")) continue;
-		const filepath = path.join(dir, file);
-		modfiles.set(file, (await fsPromise.stat(filepath)).mtimeMs);
+		for(var file of files)
+		{
+			if(!file.endsWith(".jar")) continue;
+			const filepath = path.join(dir, file);
+			modfiles.set(file, (await fsPromise.stat(filepath)).mtimeMs);
+		}
 	}
+
+	await populate_modfiles(both_files, both_dir);
+	await populate_modfiles(client_files, client_dir);
 
 	return modfiles;
 }
@@ -127,7 +134,10 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 
 	const zip_path = path.join(path_name, "mods.zip");
 
-	collect_mods(path_name).catch(err => next(err)).then(modfiles => {
+	const both_dir = path.join(path_name, "both");
+	const client_dir = path.join(path_name, "client_only");
+
+	collect_mods(both_dir, client_dir).catch(err => next(err)).then(modfiles => {
 		function send_old_zip()
 		{
 			if(!fs.existsSync(zip_path)) return false;
@@ -182,7 +192,8 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 		});
 		archive.pipe(writeStream);
 		archive.pipe(res);
-		archive.glob("*.jar", { cwd: path_name });
+		archive.glob("*.jar", { cwd: both_dir });
+		archive.glob("*.jar", { cwd: client_dir });
 		archive.finalize();
 	});
 });
