@@ -31,6 +31,8 @@ const server = restify.createServer(server_opts);
 const mods_path = path.resolve(".", "mods");
 const static_dir_path = path.resolve(".", "static");
 const main_url_path = "/minecraft/mods";
+const api_url = "/api/minecraft";
+const api_mods_url = `${api_url}/mods`;
 
 /** @typedef {Map<string, number>} ModFiles */
 
@@ -80,7 +82,7 @@ function generate_main_page(dirs)
 
 /**
  * @param {string} dir
- * @returns {ModFiles}
+ * @returns {Promise<ModFiles>}
  */
 async function collect_mods(both_dir, client_dir)
 {
@@ -109,6 +111,22 @@ async function collect_mods(both_dir, client_dir)
 server.use(restify.plugins.multipartBodyParser())
 
 server.get('/minecraft/*', restify.plugins.serveStatic({ directory: static_dir_path, appendRequestPath: false }));
+
+server.get(`${api_mods_url}/:name`, (req, res, next) => {
+	const name = req.params.name;
+	const path_name = path.join(mods_path, name);
+
+	if(!fs.existsSync(path_name))
+		return next(new errs.ResourceNotFoundError(`There is no '${name}' modpack!`));
+
+	const both_dir = path.join(path_name, "both");
+	const client_dir = path.join(path_name, "client_only");
+
+	collect_mods(both_dir, client_dir).catch(err => next(err)).then(modfiles => {
+		res.send(Object.keys(Object.fromEntries(modfiles)));
+		next();
+	});
+});
 
 server.get(main_url_path, (req, res, next) => {
 	fs.readdir(mods_path, {withFileTypes: true}, (err, mod_dirs) => {
