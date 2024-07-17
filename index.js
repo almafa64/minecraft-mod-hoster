@@ -143,6 +143,33 @@ server.get(main_url_path, (req, res, next) => {
 // debug
 server.on("connection", (socket) => console.log(`connection from '${socket.remoteAddress}'`))
 
+server.get(`${main_url_path}/:name/:mod`, (req, res, next) => {
+	const name = req.params.name;
+	const modname = req.params.mod;
+	const path_name = path.join(mods_path, name);
+
+	if(!fs.existsSync(path_name))
+		return next(new errs.ResourceNotFoundError(`There is no '${name}' modpack!`));
+	
+	var modpath = path.join(path_name, "both", modname);
+	if(!fs.existsSync(modpath))
+	{
+		modpath = path.join(path_name, "client_only", modname);
+		if(!fs.existsSync(modpath))
+			return next(new errs.ResourceNotFoundError(`There is no '${modname}' mod in '${name}' modpack!`));
+	}
+
+	res.writeHead(200, {
+		"Content-Type": "application/octet-stream",
+		"Content-Disposition": `attachment;filename=${modname}`
+	});
+
+	fs.createReadStream(modpath, {highWaterMark: 1024 * 1024}).on("close", () => next()).on('error', err => {
+		console.error("oh no: " + err);
+		next(new errs.InternalServerError("Failed to read jar! Please try again!"));
+	}).pipe(res);
+});
+
 server.get(`${main_url_path}/:name`, (req, res, next) => {
 	const name = req.params.name;
 	const path_name = path.join(mods_path, name);
