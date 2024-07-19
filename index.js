@@ -110,7 +110,11 @@ async function collect_mods(both_dir, client_dir)
 
 server.use(restify.plugins.multipartBodyParser())
 
+// ---- static ----
+
 server.get('/minecraft/*', restify.plugins.serveStatic({ directory: static_dir_path, appendRequestPath: false }));
+
+// ---- api ----
 
 server.get(`${api_mods_url}/:name`, (req, res, next) => {
 	const name = req.params.name;
@@ -127,6 +131,16 @@ server.get(`${api_mods_url}/:name`, (req, res, next) => {
 		next();
 	});
 });
+
+server.get(api_mods_url, (req, res, next) => {
+	fs.readdir(mods_path, {withFileTypes: true}, (err, mod_dirs) => {
+		mod_dirs = mod_dirs.filter(e => e.isDirectory()).map(v => v.name);
+		res.send(mod_dirs);
+		next();
+	});
+});
+
+// ---- mods ----
 
 server.get(main_url_path, (req, res, next) => {
 	fs.readdir(mods_path, {withFileTypes: true}, (err, mod_dirs) => {
