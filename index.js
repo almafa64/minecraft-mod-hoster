@@ -41,6 +41,27 @@ var all_modfiles = new Map();
 /** @type {Set<string>} */
 const zipping = new Set();
 
+function format_date(date)
+{
+	function z(a) { return a.toString().padStart(2,0); }
+	return `${z(date.getFullYear())}.${z(date.getMonth()+1)}.${z(date.getDate())}. ${z(date.getHours())}:${z(date.getMinutes())}:${z(date.getSeconds())}`;
+}
+
+/**
+ * @param {Request} req
+ * @param {string} job
+ */
+function log_user_job(req, job)
+{
+	const date = new Date();
+	console.log(`[${format_date(date)}] '${get_ip(req)}' ${job}`);
+}
+
+/**
+ * @param {Request} req
+ */
+function get_ip(req) { return req.header("x-real-ip") || req.connection.remoteAddress; }
+
 /**
  * https://stackoverflow.com/a/35951373
  * @param {Map} map1
@@ -72,12 +93,12 @@ function generate_main_page(dirs)
 
 	function make_href(name) { return `${main_url_path}/${name}`};
 
-	body += `<ul><li><a href='${make_href(dirs[0])}'>${dirs[0]}`;
-	for(var i = 1; i < dirs.length; i++)
+	body += `<ul>`;
+	for(var i = 0; i < dirs.length; i++)
 	{
-		body += `</a></li><li><a href='${make_href(dirs[i])}'>${dirs[i]}`;
+		body += `<li><a href='${make_href(dirs[i])}'>${dirs[i]}</a></li>`;
 	}
-	return body + "</a></li></ul>";
+	return body + "</ul>";
 }
 
 /**
@@ -123,6 +144,8 @@ server.get(`${api_mods_url}/:name`, (req, res, next) => {
 	if(!fs.existsSync(path_name))
 		return next(new errs.ResourceNotFoundError(`There is no '${name}' modpack!`));
 
+	log_user_job(req, `[api] getting '${name}' folder`);
+
 	const both_dir = path.join(path_name, "both");
 	const client_dir = path.join(path_name, "client_only");
 
@@ -133,6 +156,8 @@ server.get(`${api_mods_url}/:name`, (req, res, next) => {
 });
 
 server.get(api_mods_url, (req, res, next) => {
+	log_user_job(req, `[api] getting folders`);
+
 	fs.readdir(mods_path, {withFileTypes: true}, (err, mod_dirs) => {
 		mod_dirs = mod_dirs.filter(e => e.isDirectory()).map(v => v.name);
 		res.send(mod_dirs);
@@ -143,6 +168,8 @@ server.get(api_mods_url, (req, res, next) => {
 // ---- mods ----
 
 server.get(main_url_path, (req, res, next) => {
+	log_user_job(req, `getting versions`);
+
 	fs.readdir(mods_path, {withFileTypes: true}, (err, mod_dirs) => {
 		mod_dirs = mod_dirs.filter(e => e.isDirectory()).map(v => v.name);
 		const body = generate_main_page(mod_dirs);
@@ -154,9 +181,6 @@ server.get(main_url_path, (req, res, next) => {
 	});
 });
 
-// debug
-server.on("connection", (socket) => console.log(`connection from '${socket.remoteAddress}'`))
-
 server.get(`${main_url_path}/:name/:mod`, (req, res, next) => {
 	const name = req.params.name;
 	const modname = req.params.mod;
@@ -164,7 +188,7 @@ server.get(`${main_url_path}/:name/:mod`, (req, res, next) => {
 
 	if(!fs.existsSync(path_name))
 		return next(new errs.ResourceNotFoundError(`There is no '${name}' modpack!`));
-	
+
 	var modpath = path.join(path_name, "both", modname);
 	if(!fs.existsSync(modpath))
 	{
@@ -173,7 +197,10 @@ server.get(`${main_url_path}/:name/:mod`, (req, res, next) => {
 			return next(new errs.ResourceNotFoundError(`There is no '${modname}' mod in '${name}' modpack!`));
 	}
 
+	log_user_job(req, `getting '${modname}' from '${name}'`);
+
 	res.writeHead(200, {
+		"Content-Length": fs.statSync(modpath).size,
 		"Content-Type": "application/octet-stream",
 		"Content-Disposition": `attachment;filename=${modname}`
 	});
@@ -196,6 +223,8 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 	const both_dir = path.join(path_name, "both");
 	const client_dir = path.join(path_name, "client_only");
 
+	log_user_job(req, `getting '${name}' zip`);
+
 	collect_mods(both_dir, client_dir).catch(err => next(err)).then(modfiles => {
 		function send_old_zip()
 		{
@@ -205,6 +234,7 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 			if(last_modfiles === undefined || !compare_maps(last_modfiles, modfiles)) return false;
 
 			res.writeHead(200, {
+				"Content-Length": fs.statSync(zip_path).size,
 				"Content-Type": "application/zip",
 				"Content-Disposition": `attachment;filename=${name}.zip`,
 			});
