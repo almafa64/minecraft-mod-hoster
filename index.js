@@ -35,6 +35,7 @@ const api_url = "/api/minecraft";
 const api_mods_url = `${api_url}/mods`;
 
 /** @typedef {Object} ModFile
+ * @property {string} name only used in api request, has no meaning in server end
  * @property {number} mod_date
  * @property {number} size
 */
@@ -78,9 +79,10 @@ function compare_modfiles(map1, map2) {
 
 	for (const [key, val] of map1) {
 		const testVal = map2.get(key);
+
 		// in cases of an undefined value, make sure the key
 		// actually exists on the object so there are no false positives
-		if ((testVal !== undefined && val.mod_date == testVal.mod_date && val.size == testVal.size) || (testVal === undefined && !map2.has(key)))
+		if ((testVal === undefined || val.mod_date !== testVal.mod_date || val.size !== testVal.size || val.name !== testVal.name) || (testVal === undefined && !map2.has(key)))
 			return false;
 	}
 
@@ -107,7 +109,8 @@ function generate_main_page(dirs)
 }
 
 /**
- * @param {string} dir
+ * @param {string} both_dir
+ * @param {string} client_dir
  * @returns {Promise<ModFiles>}
  */
 async function collect_mods(both_dir, client_dir)
@@ -118,6 +121,10 @@ async function collect_mods(both_dir, client_dir)
 	const both_files = await fsPromise.readdir(both_dir);
 	const client_files = await fsPromise.readdir(client_dir);
 
+	/**
+	 * @param {string[]} files 
+	 * @param {string} dir 
+	 */
 	async function populate_modfiles(files, dir)
 	{
 		for(var file of files)
@@ -127,6 +134,7 @@ async function collect_mods(both_dir, client_dir)
 			const stats = await fsPromise.stat(filepath);
 			/** @type {ModFile} */
 			const modfile = {
+				name: file,
 				mod_date: stats.mtimeMs,
 				size: stats.size,
 			};
@@ -164,7 +172,7 @@ server.get(`${api_mods_url}/:name`, (req, res, next) => {
 
 	collect_mods(both_dir, client_dir).catch(err => next(err)).then(modfiles => {
 		if(api_version == "2")
-			res.send(Object.fromEntries(modfiles));
+			res.send(Object.values(Object.fromEntries(modfiles)));
 		else 
 			res.send(Object.keys(Object.fromEntries(modfiles)));
 		
