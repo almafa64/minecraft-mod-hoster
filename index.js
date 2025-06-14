@@ -34,7 +34,12 @@ const main_url_path = "/minecraft/mods";
 const api_url = "/api/minecraft";
 const api_mods_url = `${api_url}/mods`;
 
-/** @typedef {Map<string, number>} ModFiles */
+/** @typedef {Object} ModFile
+ * @property {number} mod_date
+ * @property {number} size
+*/
+
+/** @typedef {Map<string, ModFile>} ModFiles */
 
 /** @type {Map<string, ModFiles>} { dir: { filename: modify date }}*/
 var all_modfiles = new Map();
@@ -64,18 +69,18 @@ function get_ip(req) { return req.header("x-real-ip") || req.connection.remoteAd
 
 /**
  * https://stackoverflow.com/a/35951373
- * @param {Map} map1
- * @param {Map} map2
+ * @param {ModFiles} map1
+ * @param {ModFiles} map2
  * @returns {boolean} true if same
  */
-function compare_maps(map1, map2) {
+function compare_modfiles(map1, map2) {
 	if (map1.size !== map2.size) return false;
 
 	for (const [key, val] of map1) {
 		const testVal = map2.get(key);
 		// in cases of an undefined value, make sure the key
 		// actually exists on the object so there are no false positives
-		if (testVal !== val || (testVal === undefined && !map2.has(key)))
+		if ((testVal !== undefined && val.mod_date == testVal.mod_date && val.size == testVal.size) || (testVal === undefined && !map2.has(key)))
 			return false;
 	}
 
@@ -119,7 +124,13 @@ async function collect_mods(both_dir, client_dir)
 		{
 			if(!file.endsWith(".jar")) continue;
 			const filepath = path.join(dir, file);
-			modfiles.set(file, (await fsPromise.stat(filepath)).mtimeMs);
+			const stats = await fsPromise.stat(filepath);
+			/** @type {ModFile} */
+			const modfile = {
+				mod_date: stats.mtimeMs,
+				size: stats.size,
+			};
+			modfiles.set(file, modfile);
 		}
 	}
 
@@ -130,6 +141,7 @@ async function collect_mods(both_dir, client_dir)
 }
 
 server.use(restify.plugins.multipartBodyParser())
+server.use(restify.plugins.queryParser())
 
 // ---- static ----
 
@@ -138,6 +150,7 @@ server.get('/minecraft/*', restify.plugins.serveStatic({ directory: static_dir_p
 // ---- api ----
 
 server.get(`${api_mods_url}/:name`, (req, res, next) => {
+	const api_version = req.query["v"] || "1";
 	const name = req.params.name;
 	const path_name = path.join(mods_path, name);
 
@@ -150,7 +163,11 @@ server.get(`${api_mods_url}/:name`, (req, res, next) => {
 	const client_dir = path.join(path_name, "client_only");
 
 	collect_mods(both_dir, client_dir).catch(err => next(err)).then(modfiles => {
-		res.send(Object.keys(Object.fromEntries(modfiles)));
+		if(api_version == "2")
+			res.send(Object.fromEntries(modfiles));
+		else 
+			res.send(Object.keys(Object.fromEntries(modfiles)));
+		
 		next();
 	});
 });
@@ -231,7 +248,7 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 			if(!fs.existsSync(zip_path)) return false;
 
 			const last_modfiles = all_modfiles.get(name);
-			if(last_modfiles === undefined || !compare_maps(last_modfiles, modfiles)) return false;
+			if(last_modfiles === undefined || !compare_modfiles(last_modfiles, modfiles)) return false;
 
 			res.writeHead(200, {
 				"Content-Length": fs.statSync(zip_path).size,
