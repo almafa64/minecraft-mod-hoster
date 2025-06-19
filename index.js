@@ -31,13 +31,16 @@ const server = restify.createServer(server_opts);
 const mods_path = path.resolve(".", "mods");
 const static_dir_path = path.resolve(".", "static");
 const main_url_path = "/minecraft/mods";
-const api_url = "/api/minecraft";
+const api_url = "/minecraft/api";
 const api_mods_url = `${api_url}/mods`;
+const api_url_old = "/api/minecraft";
+const api_mods_url_old = `${api_url_old}/mods`;
 
 /** @typedef {Object} ModFile
  * @property {string} name only used in api request, has no meaning in server end
  * @property {number} mod_date
  * @property {number} size
+ * @property {boolean} is_optional
 */
 
 /** @typedef {Map<string, ModFile>} ModFiles */
@@ -137,6 +140,7 @@ async function collect_mods(both_dir, client_dir)
 				name: file,
 				mod_date: stats.mtimeMs,
 				size: stats.size,
+				is_optional: false,
 			};
 			modfiles.set(file, modfile);
 		}
@@ -157,7 +161,17 @@ server.get('/minecraft/*', restify.plugins.serveStatic({ directory: static_dir_p
 
 // ---- api ----
 
-server.get(`${api_mods_url}/:name`, (req, res, next) => {
+function api_mods_main(req, res, next) {
+	log_user_job(req, `[api] getting folders`);
+
+	fs.readdir(mods_path, {withFileTypes: true}, (err, mod_dirs) => {
+		mod_dirs = mod_dirs.filter(e => e.isDirectory()).map(v => v.name);
+		res.send(mod_dirs);
+		next();
+	});
+}
+
+function api_mods_branch(req, res, next) {
 	const api_version = req.query["v"] || "1";
 	const name = req.params.name;
 	const path_name = path.join(mods_path, name);
@@ -178,17 +192,13 @@ server.get(`${api_mods_url}/:name`, (req, res, next) => {
 		
 		next();
 	});
-});
+}
 
-server.get(api_mods_url, (req, res, next) => {
-	log_user_job(req, `[api] getting folders`);
+server.get(`${api_mods_url}/:name`, api_mods_branch);
+server.get(`${api_mods_url_old}/:name`, api_mods_branch);
 
-	fs.readdir(mods_path, {withFileTypes: true}, (err, mod_dirs) => {
-		mod_dirs = mod_dirs.filter(e => e.isDirectory()).map(v => v.name);
-		res.send(mod_dirs);
-		next();
-	});
-});
+server.get(api_mods_url, api_mods_main);
+server.get(api_mods_url_old, api_mods_main);
 
 // ---- mods ----
 
