@@ -176,7 +176,7 @@ function api_mods_branch(req, res, next) {
 	const name = req.params.name;
 	const path_name = path.join(mods_path, name);
 
-	if(!fs.existsSync(path_name))
+	if(name == "" || !fs.existsSync(path_name))
 		return next(new errs.ResourceNotFoundError(`There is no '${name}' modpack!`));
 
 	log_user_job(req, `[api] getting '${name}' folder`);
@@ -184,8 +184,27 @@ function api_mods_branch(req, res, next) {
 	const both_dir = path.join(path_name, "both");
 	const client_dir = path.join(path_name, "client_only");
 
-	collect_mods(both_dir, client_dir).catch(err => next(err)).then(modfiles => {
-		if(api_version == "2")
+	collect_mods(both_dir, client_dir).catch(err => next(err)).then(async modfiles => {
+		if(api_version == "3") {
+			const zip_path = path.join(path_name, "mods.zip");
+			var zip_stats = undefined;
+			try {
+				zip_stats = await fsPromise.stat(zip_path);
+				const last_modfiles = all_modfiles.get(name);
+				if(last_modfiles === undefined || !compare_modfiles(last_modfiles, modfiles))
+					zip_stats = undefined;
+			} catch {}
+			
+			res.send({
+				zip: {
+					name: name,
+					size: zip_stats ? zip_stats.size : 0,
+					present: zip_stats != undefined,
+				},
+				mods: Object.values(Object.fromEntries(modfiles))
+			});
+		}
+		else if(api_version == "2")
 			res.send(Object.values(Object.fromEntries(modfiles)));
 		else 
 			res.send(Object.keys(Object.fromEntries(modfiles)));
