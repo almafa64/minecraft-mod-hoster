@@ -1,5 +1,5 @@
-> [!CAUTION]
-> This is an older version of the host server, which doesn't support newer versions of https://github.com/almafa64/minecraft-mod-syncer.
+> [!WARNING]
+> This is currently very in WIP phase. There is possibility for zips to get out of sync, data races, and other unknown things lurk here. But modifying mods at runtime rarely shouldn't cause any trouble.
 
 # Almafa64's Minecraft Mod Hoster
 (name is subject to change)
@@ -25,35 +25,19 @@ version set by `v` query, by default it's omitted.<br>
 **Returns 404 if branch isn't found.**
 
 #### Default
-Lists all mod names in branch in JSON list.
-
-#### ?v=2
-```json
-[
-	{
-		"name": "create-6.0.0.jar", // name of mod
-		"mod_date": 1756923801532,  // unix epoch timestamp in milliseconds
-		"size": 10000,              // size in bytes
-		"is_optional": false        // always false
-	},
-	...
-]
-```
-
-#### ?v=3
 ```json
 {
 	"zip": {
-		"name": "forge-1.20.1", // name is same as branch_name
-		"size": 100000,         // size in bytes
-		"present": true         // true if zip exists
+		"mod_date": 1756923801532, // zip modified date in milliseconds (unix epoch timestamp)
+		"size": 100000,            // size in bytes
+		"is_present": true         // true if zip exists
 	},
 	"mods": [
 		{
 			"name": "my-mod-1.0.0.jar", // name of mod
-			"mod_date": 1756923801532,  // file modified date in milliseconds unix epoch timestamp
+			"mod_date": 1756923801000,  // file modified date in milliseconds (unix epoch timestamp), millisecond part always == 0 for zip compatibility
 			"size": 10000,              // size in bytes
-			"is_optional": false        // always false
+			"is_optional": false        // true if mod isn't required for user
 		},
 		...
 	]

@@ -1,2 +1,3 @@
-node_modules
 branches
+logs
+coverage
