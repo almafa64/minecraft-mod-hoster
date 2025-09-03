@@ -2,9 +2,9 @@
 
 // ---- user settings ----
 
-const PRIVATE_KEY_PATH = "/etc/letsencrypt/live/themoonbase.dnet.hu/privkey.pem";
-const CERTIFICATE_PATH = "/etc/letsencrypt/live/themoonbase.dnet.hu/fullchain.pem";
-const PORT = 3009;
+const PRIVATE_KEY_PATH = "<YOUR PRIVATE SSL KEY PATH HERE>";
+const CERTIFICATE_PATH = "<YOUR PUBLIC SSL KEY PATH HERE>";
+const PORT = 443;
 
 // ---- server code ----
 
