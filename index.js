@@ -2,9 +2,9 @@
 
 // ---- user settings ----
 
-const PRIVATE_KEY_PATH = "<YOUR PRIVATE SSL KEY PATH HERE>";
-const CERTIFICATE_PATH = "<YOUR PUBLIC SSL KEY PATH HERE>";
-const PORT = 443;
+const PRIVATE_KEY_PATH = "/etc/letsencrypt/live/themoonbase.dnet.hu/privkey.pem";
+const CERTIFICATE_PATH = "/etc/letsencrypt/live/themoonbase.dnet.hu/fullchain.pem";
+const PORT = 3009;
 
 // ---- server code ----
 
@@ -19,8 +19,7 @@ const { strictEqual } = require('assert');
 /**	@type {restify.ServerOptions} */
 const server_opts = { strictNext: true }
 
-if(fs.existsSync(PRIVATE_KEY_PATH) && fs.existsSync(CERTIFICATE_PATH))
-{
+if (fs.existsSync(PRIVATE_KEY_PATH) && fs.existsSync(CERTIFICATE_PATH)) {
 	Object.assign(server_opts, {
 		key: fs.readFileSync(PRIVATE_KEY_PATH),
 		certificate: fs.readFileSync(CERTIFICATE_PATH)
@@ -28,7 +27,7 @@ if(fs.existsSync(PRIVATE_KEY_PATH) && fs.existsSync(CERTIFICATE_PATH))
 }
 
 const server = restify.createServer(server_opts);
-const mods_path = path.resolve(".", "mods");
+const mods_path = path.resolve(".", "branches");
 const static_dir_path = path.resolve(".", "static");
 const main_url_path = "/minecraft/mods";
 const api_url = "/minecraft/api";
@@ -50,18 +49,16 @@ var all_modfiles = new Map();
 /** @type {Set<string>} */
 const zipping = new Set();
 
-function format_date(date)
-{
-	function z(a) { return a.toString().padStart(2,0); }
-	return `${z(date.getFullYear())}.${z(date.getMonth()+1)}.${z(date.getDate())}. ${z(date.getHours())}:${z(date.getMinutes())}:${z(date.getSeconds())}`;
+function format_date(date) {
+	function z(a) { return a.toString().padStart(2, 0); }
+	return `${z(date.getFullYear())}.${z(date.getMonth() + 1)}.${z(date.getDate())}. ${z(date.getHours())}:${z(date.getMinutes())}:${z(date.getSeconds())}`;
 }
 
 /**
  * @param {Request} req
  * @param {string} job
  */
-function log_user_job(req, job)
-{
+function log_user_job(req, job) {
 	const date = new Date();
 	console.log(`[${format_date(date)}] '${get_ip(req)}' ${job}`);
 }
@@ -96,16 +93,14 @@ function compare_modfiles(map1, map2) {
  * @param {string[]} dirs
  * @returns {string}
  */
-function generate_main_page(dirs)
-{
+function generate_main_page(dirs) {
 	var body = '<link rel="shortcut icon" href="/minecraft/favicon.ico">';
-	if(dirs.length == 0) return body + "No mods here!";
+	if (dirs.length == 0) return body + "No mods here!";
 
-	function make_href(name) { return `${main_url_path}/${name}`};
+	function make_href(name) { return `${main_url_path}/${name}` };
 
 	body += `<ul>`;
-	for(var i = 0; i < dirs.length; i++)
-	{
+	for (var i = 0; i < dirs.length; i++) {
 		body += `<li><a href='${make_href(dirs[i])}'>${dirs[i]}</a></li>`;
 	}
 	return body + "</ul>";
@@ -116,23 +111,36 @@ function generate_main_page(dirs)
  * @param {string} client_dir
  * @returns {Promise<ModFiles>}
  */
-async function collect_mods(both_dir, client_dir)
-{
+async function collect_mods(both_dir, client_dir) {
 	/** @type {ModFiles} */
 	const modfiles = new Map();
 
-	const both_files = await fsPromise.readdir(both_dir);
-	const client_files = await fsPromise.readdir(client_dir);
+	/** @type {string[]} */
+	var client_files;
+	/** @type {string[]} */
+	var both_files;
+
+	try {
+		both_files = await fsPromise.readdir(both_dir);
+	}
+	catch (e) {
+		client_files = [];
+	}
+
+	try {
+		client_files = await fsPromise.readdir(client_dir);
+	}
+	catch (e) {
+		client_files = [];
+	}
 
 	/**
 	 * @param {string[]} files 
 	 * @param {string} dir 
 	 */
-	async function populate_modfiles(files, dir)
-	{
-		for(var file of files)
-		{
-			if(!file.endsWith(".jar")) continue;
+	async function populate_modfiles(files, dir) {
+		for (var file of files) {
+			if (!file.endsWith(".jar")) continue;
 			const filepath = path.join(dir, file);
 			const stats = await fsPromise.stat(filepath);
 			/** @type {ModFile} */
@@ -164,7 +172,7 @@ server.get('/minecraft/*', restify.plugins.serveStatic({ directory: static_dir_p
 function api_mods_main(req, res, next) {
 	log_user_job(req, `[api] getting folders`);
 
-	fs.readdir(mods_path, {withFileTypes: true}, (err, mod_dirs) => {
+	fs.readdir(mods_path, { withFileTypes: true }, (err, mod_dirs) => {
 		mod_dirs = mod_dirs.filter(e => e.isDirectory()).map(v => v.name);
 		res.send(mod_dirs);
 		next();
@@ -176,7 +184,7 @@ function api_mods_branch(req, res, next) {
 	const name = req.params.name;
 	const path_name = path.join(mods_path, name);
 
-	if(name == "" || !fs.existsSync(path_name))
+	if (name == "" || !fs.existsSync(path_name))
 		return next(new errs.ResourceNotFoundError(`There is no '${name}' modpack!`));
 
 	log_user_job(req, `[api] getting '${name}' folder`);
@@ -185,16 +193,16 @@ function api_mods_branch(req, res, next) {
 	const client_dir = path.join(path_name, "client_only");
 
 	collect_mods(both_dir, client_dir).catch(err => next(err)).then(async modfiles => {
-		if(api_version == "3") {
+		if (api_version == "3") {
 			const zip_path = path.join(path_name, "mods.zip");
 			var zip_stats = undefined;
 			try {
 				zip_stats = await fsPromise.stat(zip_path);
 				const last_modfiles = all_modfiles.get(name);
-				if(last_modfiles === undefined || !compare_modfiles(last_modfiles, modfiles))
+				if (last_modfiles === undefined || !compare_modfiles(last_modfiles, modfiles))
 					zip_stats = undefined;
-			} catch {}
-			
+			} catch { }
+
 			res.send({
 				zip: {
 					name: name,
@@ -204,11 +212,11 @@ function api_mods_branch(req, res, next) {
 				mods: Object.values(Object.fromEntries(modfiles))
 			});
 		}
-		else if(api_version == "2")
+		else if (api_version == "2")
 			res.send(Object.values(Object.fromEntries(modfiles)));
-		else 
+		else
 			res.send(Object.keys(Object.fromEntries(modfiles)));
-		
+
 		next();
 	});
 }
@@ -224,7 +232,7 @@ server.get(api_mods_url_old, api_mods_main);
 server.get(main_url_path, (req, res, next) => {
 	log_user_job(req, `getting versions`);
 
-	fs.readdir(mods_path, {withFileTypes: true}, (err, mod_dirs) => {
+	fs.readdir(mods_path, { withFileTypes: true }, (err, mod_dirs) => {
 		mod_dirs = mod_dirs.filter(e => e.isDirectory()).map(v => v.name);
 		const body = generate_main_page(mod_dirs);
 		res.writeHead(200, {
@@ -240,14 +248,13 @@ server.get(`${main_url_path}/:name/:mod`, (req, res, next) => {
 	const modname = req.params.mod;
 	const path_name = path.join(mods_path, name);
 
-	if(!fs.existsSync(path_name))
+	if (!fs.existsSync(path_name))
 		return next(new errs.ResourceNotFoundError(`There is no '${name}' modpack!`));
 
 	var modpath = path.join(path_name, "both", modname);
-	if(!fs.existsSync(modpath))
-	{
+	if (!fs.existsSync(modpath)) {
 		modpath = path.join(path_name, "client_only", modname);
-		if(!fs.existsSync(modpath))
+		if (!fs.existsSync(modpath))
 			return next(new errs.ResourceNotFoundError(`There is no '${modname}' mod in '${name}' modpack!`));
 	}
 
@@ -259,7 +266,7 @@ server.get(`${main_url_path}/:name/:mod`, (req, res, next) => {
 		"Content-Disposition": `attachment;filename=${modname}`
 	});
 
-	fs.createReadStream(modpath, {highWaterMark: 1024 * 1024}).on("close", () => next()).on('error', err => {
+	fs.createReadStream(modpath, { highWaterMark: 1024 * 1024 }).on("close", () => next()).on('error', err => {
 		console.error("oh no: " + err);
 		next(new errs.InternalServerError("Failed to read jar! Please try again!"));
 	}).pipe(res);
@@ -269,7 +276,7 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 	const name = req.params.name;
 	const path_name = path.join(mods_path, name);
 
-	if(!fs.existsSync(path_name))
+	if (!fs.existsSync(path_name))
 		return next(new errs.ResourceNotFoundError(`There is no '${name}' modpack!`));
 
 	const zip_path = path.join(path_name, "mods.zip");
@@ -280,12 +287,11 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 	log_user_job(req, `getting '${name}' zip`);
 
 	collect_mods(both_dir, client_dir).catch(err => next(err)).then(modfiles => {
-		function send_old_zip()
-		{
-			if(!fs.existsSync(zip_path)) return false;
+		function send_old_zip() {
+			if (!fs.existsSync(zip_path)) return false;
 
 			const last_modfiles = all_modfiles.get(name);
-			if(last_modfiles === undefined || !compare_modfiles(last_modfiles, modfiles)) return false;
+			if (last_modfiles === undefined || !compare_modfiles(last_modfiles, modfiles)) return false;
 
 			res.writeHead(200, {
 				"Content-Length": fs.statSync(zip_path).size,
@@ -293,7 +299,7 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 				"Content-Disposition": `attachment;filename=${name}.zip`,
 			});
 
-			fs.createReadStream(zip_path, {highWaterMark: 1024 * 1024}).on("close", () => next()).on('error', err => {
+			fs.createReadStream(zip_path, { highWaterMark: 1024 * 1024 }).on("close", () => next()).on('error', err => {
 				console.error("oh no: " + err);
 				next(new errs.InternalServerError("Failed to read zip! Please try again!"));
 			}).pipe(res);
@@ -302,8 +308,7 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 		}
 
 		function run() {
-			if(zipping.has(name))
-			{
+			if (zipping.has(name)) {
 				setTimeout(run, 50);
 				return true;
 			}
@@ -311,9 +316,9 @@ server.get(`${main_url_path}/:name`, (req, res, next) => {
 			return send_old_zip();
 		}
 
-		if(run()) return;
+		if (run()) return;
 
-		const archive = archiver('zip', { zlib: { level: 9 }});
+		const archive = archiver('zip', { zlib: { level: 9 } });
 		const writeStream = fs.createWriteStream(zip_path);
 
 		res.writeHead(200, {
