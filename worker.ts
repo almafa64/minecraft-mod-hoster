@@ -4,8 +4,8 @@ import { CLIENT_MOD_ZIP_NAME, get_branches_dir_path } from "./config.ts";
 import * as fs from "@std/fs";
 import { createHttpError } from "jsr:@oak/commons@1/http_errors";
 import { Status } from "jsr:@oak/commons@1/status";
-import * as zipjs from "@zip-js/zip-js/data-uri";
-import { debounce, DebouncedFunction } from "jsr:@std/async/debounce";
+import * as zipjs from "@zip-js/zip-js";
+import { debounce, DebouncedFunction } from "@std/async/debounce";
 import { tee } from "./logging.ts";
 
 // @ts-types="npm:@types/archiver"
@@ -19,7 +19,7 @@ const branches_debounce: Map<string, DebouncedFunction<[path: string]>> = new Ma
 const branches_zip_is_dirty: Map<string, boolean> = new Map();
 
 export async function get_branch_names() {
-	return branches.keys().toArray();
+	return branches.keys().toArray().sort();
 }
 
 export async function get_branch(branch_name: string) {
@@ -217,7 +217,6 @@ export async function make_client_zip(branch_name: string, mod_file_names: Set<s
 	//           ^-- both has to cooperate and call each other when change was detected
 	//               ^-- how to do this?
 
-	// TODO: catch this
 	try {
 		await Promise.all(zipping_file_paths.map(async (p) => {
 			const name = path.basename(p);
@@ -227,6 +226,7 @@ export async function make_client_zip(branch_name: string, mod_file_names: Set<s
 		}));
 	} catch (e) {
 		tee(`error while zipping '${branch_name}.zip': ${e}`);
+		return zip_data;
 	} finally {
 		await zip_writer.close();
 	}
@@ -253,6 +253,8 @@ export async function make_client_zip(branch_name: string, mod_file_names: Set<s
 	zip_data.mod_date = (stats.mtime ?? new Date(0)).getTime();
 
 	zipping_branches.delete(branch_name);
+
+	tee(`done zipping ${branch_name}`);
 
 	return zip_data;
 }
@@ -418,6 +420,8 @@ export async function start_watcher() {
 		e.paths.forEach((p) => {
 			const rel_path = path.relative(BRANCHES_DIR_PATH, p);
 			const path_parts = rel_path.split(path.SEPARATOR, 4);
+
+			// TODO: make branch deleting/moving/renaming possible
 
 			// return if there isnt a branch folder
 			if (path_parts.length < 2) return;

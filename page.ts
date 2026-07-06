@@ -33,7 +33,7 @@ router.get(PAGE_URL_PATH, async (ctx) => {
 router.get(`${PAGE_URL_PATH}/:branch`, async (ctx) => {
 	const branch_name = ctx.params.branch;
 
-	await log_user_job(ctx, LOG_TAGS.PAGE, `getting '${branch_name}' zip`);
+	await log_user_job(ctx, LOG_TAGS.PAGE, `downloading '${branch_name}' zip`);
 
 	const zip_path = await get_zip_path(branch_name);
 	if (zip_path instanceof HttpError) {
@@ -51,7 +51,7 @@ router.get(`${PAGE_URL_PATH}/:branch/:mod`, async (ctx) => {
 	const branch_name = ctx.params.branch;
 	const mod_name = ctx.params.mod;
 
-	await log_user_job(ctx, LOG_TAGS.PAGE, `getting '${mod_name}' from '${branch_name}'`);
+	await log_user_job(ctx, LOG_TAGS.PAGE, `downloading '${mod_name}' from '${branch_name}'`);
 
 	const mod_path = await get_mod_path(branch_name, mod_name);
 	if (mod_path instanceof HttpError) {
