@@ -2,7 +2,7 @@ import { Router } from "@oak/oak/router";
 import { LOG_TAGS, log_user_job } from "./logging.ts";
 import { MAIN_URL_PATH } from "./config.ts";
 import { get_branch, get_branch_names } from "./worker.ts";
-import { HttpError } from "jsr:@oak/commons@1/http_errors";
+import { HttpError } from "@oak/commons/http_errors";
 
 const API_URL = `${MAIN_URL_PATH}/api`;
 const API_MODS_URL = "/mods";

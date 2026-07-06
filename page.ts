@@ -2,7 +2,7 @@ import { Router } from "@oak/oak/router";
 import { LOG_TAGS, log_user_job } from "./logging.ts";
 import { get_branches_dir_path, MAIN_URL_PATH } from "./config.ts";
 import { get_branch_names, get_mod_path, get_zip_path } from "./worker.ts";
-import { HttpError } from "jsr:@oak/commons@1/http_errors";
+import { HttpError } from "@oak/commons/http_errors";
 import * as path from "@std/path";
 
 const PAGE_URL_PATH = "/mods";
