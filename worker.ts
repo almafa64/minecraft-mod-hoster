@@ -8,21 +8,17 @@ import * as zipjs from "@zip-js/zip-js";
 import { debounce, DebouncedFunction } from "@std/async/debounce";
 import { tee } from "./logging.ts";
 
-// @ts-types="npm:@types/archiver"
-/*import * as archiver from "npm:archiver";
-import { createWriteStream } from "node:fs";*/
-
 // TODO: 1 map
 const branches: Map<string, BranchData | undefined> = new Map();
 const zipping_branches: Set<string> = new Set();
 const branches_debounce: Map<string, DebouncedFunction<[path: string]>> = new Map();
 const branches_zip_is_dirty: Map<string, boolean> = new Map();
 
-export async function get_branch_names() {
+export function get_branch_names() {
 	return branches.keys().toArray().sort();
 }
 
-export async function get_branch(branch_name: string) {
+export function get_branch(branch_name: string) {
 	if (branch_name === "")
 		return createHttpError(Status.NotFound, "Branch name cannot be empty", { expose: false });
 
@@ -100,10 +96,11 @@ export async function get_zip_path(branch_name: string) {
 		return createHttpError(Status.NotFound, `There is no '${branch_name}' modpack`, { expose: false });
 
 	const zip_path = path.join(branch_name, CLIENT_MOD_ZIP_NAME);
-	if (await fs.exists(path.join(BRANCHES_DIR_PATH, zip_path)))
-		return zip_path;
 
-	return createHttpError(Status.NotFound, no_zip_msg, { expose: false });
+	if (!await fs.exists(path.join(BRANCHES_DIR_PATH, zip_path)))
+		return createHttpError(Status.NotFound, no_zip_msg, { expose: false });
+
+	return zip_path;
 }
 
 export async function collect_branch(branch_name: string) {
@@ -123,19 +120,19 @@ export async function collect_branch(branch_name: string) {
 			if (!file.isFile || !file.name.endsWith(".jar")) continue;
 
 			const file_path = path.join(dir, file.name);
-			promises.push(
-				Deno.stat(file_path).then((stats) => {
-					// cut off milliseconds, to match zip format
-					const mod_date = Math.floor((stats.mtime ?? new Date(0)).getTime() / 1000) * 1000;
+			const promise = Deno.stat(file_path).then((stats) => {
+				// cut off milliseconds, to match zip format
+				const mod_date = Math.floor((stats.mtime ?? new Date(0)).getTime() / 1000) * 1000;
 
-					mod_files.set(file.name, {
-						name: file.name,
-						mod_date: mod_date,
-						size: stats.size,
-						is_optional: is_optional,
-					});
-				}),
-			);
+				mod_files.set(file.name, {
+					name: file.name,
+					mod_date: mod_date,
+					size: stats.size,
+					is_optional: is_optional,
+				});
+			});
+
+			promises.push(promise);
 		}
 
 		await Promise.all(promises);
@@ -231,22 +228,6 @@ export async function make_client_zip(branch_name: string, mod_file_names: Set<s
 		await zip_writer.close();
 	}
 
-	// const a = archiver.default("zip", { zlib: { level: 1 } });
-	// const b = createWriteStream(zip_path);
-	// a.pipe(b);
-
-	// for await (
-	// 	const file of fs.expandGlob(path.join(branch_path, "**/*.jar"), {
-	// 		includeDirs: false,
-	// 		exclude: [path.join(branch_path, "server_only/**")],
-	// 	})
-	// ) {
-	// 	a.file(file.path, {name: file.name});
-	// }
-
-	// await a.finalize();
-	// b.close();
-
 	const stats = await Deno.stat(zip_path);
 	zip_data.size = stats.size;
 	zip_data.is_present = true;
@@ -292,6 +273,21 @@ export async function read_client_zip(branch_name: string) {
 	}
 
 	return mod_files;
+}
+
+// https://stackoverflow.com/a/35951373
+export function compare_modfiles(map1: ModFiles, map2: ModFiles) {
+	if (map1.size !== map2.size) return false;
+
+	for (const [key, val] of map1) {
+		const testVal = map2.get(key);
+
+		// No need for !map2.has(key) because value cannot be undefined thanks to typescript
+		if (testVal === undefined || val.mod_date !== testVal.mod_date || val.size !== testVal.size)
+			return false;
+	}
+
+	return true;
 }
 
 // TODO:
@@ -340,21 +336,6 @@ export async function collect_all_branch() {
 
 		branches_zip_is_dirty.set(branch_name, false);
 	}));
-}
-
-// https://stackoverflow.com/a/35951373
-export function compare_modfiles(map1: ModFiles, map2: ModFiles) {
-	if (map1.size !== map2.size) return false;
-
-	for (const [key, val] of map1) {
-		const testVal = map2.get(key);
-
-		// No need for !map2.has(key) because value cannot be undefined thanks to typescript
-		if (testVal === undefined || val.mod_date !== testVal.mod_date || val.size !== testVal.size)
-			return false;
-	}
-
-	return true;
 }
 
 function new_fs_debounce() {
